@@ -1,6 +1,7 @@
 ﻿using Label = System.Windows.Forms.Label;
 using Application = System.Windows.Forms.Application;
 using System.Runtime.InteropServices;
+using Monitor = BrightnessControl.Models.Monitor;
 
 namespace BrightnessControl
 {
@@ -40,7 +41,7 @@ namespace BrightnessControl
 
         private void UpdateBrightness()
         {
-            if (monitorComboBox.SelectedItem is MonitorInfo selectedMonitor)
+            if (monitorComboBox.SelectedItem is Monitor selectedMonitor)
             {
                 int brightness = brightnessTrackBar.Value;
                 selectedMonitor.SetBrightness(brightness);
@@ -52,7 +53,7 @@ namespace BrightnessControl
         {
             monitorComboBox.Items.Clear();
 
-            var monitors = MonitorInfo.GetMonitors();
+            var monitors = Monitor.GetMonitors();
             if (monitors.Length is not 0)
             {
                 monitorComboBox.Items.AddRange(monitors);
@@ -94,7 +95,7 @@ namespace BrightnessControl
 
         private void ChangeBrightness(int change)
         {
-            if (monitorComboBox.SelectedItem is MonitorInfo)
+            if (monitorComboBox.SelectedItem is Monitor)
             {
                 int newBrightness = brightnessTrackBar.Value + change;
                 newBrightness = Math.Max(brightnessTrackBar.Minimum, Math.Min(brightnessTrackBar.Maximum, newBrightness));
@@ -116,83 +117,5 @@ namespace BrightnessControl
 
         private const uint MOD_CONTROL = 0x0002;
         private const uint MOD_SHIFT = 0x0004;
-    }
-
-    public class MonitorInfo
-    {
-        public required string Name { get; set; }
-        public required string Path { get; set; }
-
-        public override string ToString() => Name;
-
-        public static MonitorInfo[] GetMonitors()
-        {
-            var monitors = new List<MonitorInfo>();
-
-            bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData)
-            {
-                uint physicalMonitorCount = 0;
-                if (GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, ref physicalMonitorCount))
-                {
-                    var physicalMonitors = new PHYSICAL_MONITOR[physicalMonitorCount];
-                    if (GetPhysicalMonitorsFromHMONITOR(hMonitor, physicalMonitorCount, physicalMonitors))
-                    {
-                        foreach (var physicalMonitor in physicalMonitors)
-                        {
-                            monitors.Add(new MonitorInfo
-                            {
-                                Name = physicalMonitor.szPhysicalMonitorDescription,
-                                Path = physicalMonitor.hPhysicalMonitor.ToString()
-                            });
-                        }
-                    }
-                }
-                return true;
-            }
-
-            EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, MonitorEnumProc, IntPtr.Zero);
-
-            return [.. monitors];
-        }
-
-        public void SetBrightness(int brightness)
-        {
-            var hMonitor = new IntPtr(long.Parse(Path));
-            if (!SetVCPFeature(hMonitor, 0x10, (uint)brightness))
-            {
-                throw new InvalidOperationException("Failed to set monitor brightness.");
-            }
-        }
-
-        [DllImport("user32.dll")]
-        private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
-
-        private delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
-
-        [DllImport("dxva2.dll", SetLastError = true)]
-        private static extern bool GetNumberOfPhysicalMonitorsFromHMONITOR(IntPtr hMonitor, ref uint pdwNumberOfPhysicalMonitors);
-
-        [DllImport("dxva2.dll", SetLastError = true)]
-        private static extern bool GetPhysicalMonitorsFromHMONITOR(IntPtr hMonitor, uint dwPhysicalMonitorArraySize, [Out] PHYSICAL_MONITOR[] pPhysicalMonitorArray);
-
-        [DllImport("dxva2.dll", SetLastError = true)]
-        private static extern bool SetVCPFeature(IntPtr hMonitor, byte bVCPCode, uint dwNewValue);
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-        private struct PHYSICAL_MONITOR
-        {
-            public IntPtr hPhysicalMonitor;
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-            public string szPhysicalMonitorDescription;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct RECT
-        {
-            public int left;
-            public int top;
-            public int right;
-            public int bottom;
-        }
     }
 }
