@@ -1,35 +1,44 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 
 namespace BrightnessControl.Models
 {
-    public class Monitor
+    public class DisplayMonitor
     {
         public required string Name { get; set; }
         public required string Path { get; set; }
 
+        private const byte VCP_LUMINANCE = 0x10;
+
         public override string ToString() => Name;
 
-        public static Monitor[] GetMonitors()
+        public static DisplayMonitor[] GetMonitors()
         {
-            var monitors = new List<Monitor>();
+            var monitors = new List<DisplayMonitor>();
 
             bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData)
             {
                 uint physicalMonitorCount = 0;
-                if (GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, ref physicalMonitorCount))
+                try
                 {
-                    var physicalMonitors = new PHYSICAL_MONITOR[physicalMonitorCount];
-                    if (GetPhysicalMonitorsFromHMONITOR(hMonitor, physicalMonitorCount, physicalMonitors))
+                    if (GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, ref physicalMonitorCount))
                     {
-                        foreach (var physicalMonitor in physicalMonitors)
+                        var physicalMonitors = new PHYSICAL_MONITOR[physicalMonitorCount];
+                        if (GetPhysicalMonitorsFromHMONITOR(hMonitor, physicalMonitorCount, physicalMonitors))
                         {
-                            monitors.Add(new Monitor
+                            foreach (var physicalMonitor in physicalMonitors)
                             {
-                                Name = physicalMonitor.szPhysicalMonitorDescription,
-                                Path = physicalMonitor.hPhysicalMonitor.ToString()
-                            });
+                                monitors.Add(new DisplayMonitor
+                                {
+                                    Name = physicalMonitor.szPhysicalMonitorDescription,
+                                    Path = physicalMonitor.hPhysicalMonitor.ToString()
+                                });
+                            }
                         }
                     }
+                }
+                catch
+                {
+                    // Ignore errors during enumeration to ensure at least some monitors might be found
                 }
                 return true;
             }
@@ -39,14 +48,30 @@ namespace BrightnessControl.Models
             return [.. monitors];
         }
 
+        public async Task SetBrightnessAsync(int brightness)
+        {
+            await Task.Run(() => SetBrightness(brightness));
+        }
+
         public void SetBrightness(int brightness)
         {
-            var hMonitor = new IntPtr(long.Parse(Path));
-            if (!SetVCPFeature(hMonitor, 0x10, (uint)brightness))
+            try
             {
-                throw new InvalidOperationException("Failed to set monitor brightness.");
+                var hMonitor = new IntPtr(long.Parse(Path));
+                if (!SetVCPFeature(hMonitor, VCP_LUMINANCE, (uint)brightness))
+                {
+                    // If setting fails, we throw to let the caller handle it (e.g. show a message or log)
+                    // But we wrap it in a clearer exception
+                    throw new IOException($"Failed to set brightness on monitor '{Name}'. The monitor might not support DDC/CI or the driver may be unresponsive.");
+                }
+            }
+            catch (Exception ex) when (ex is not IOException)
+            {
+                throw new IOException($"Error communicating with monitor '{Name}': {ex.Message}", ex);
             }
         }
+
+        // --- P/Invoke Definitions ---
 
         [DllImport("user32.dll")]
         private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
