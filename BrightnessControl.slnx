@@ -1,8 +1,4 @@
 <Solution>
-  <Configurations>
-    <Platform Name="x64" />
-  </Configurations>
-  <Project Path="BrightnessControl.csproj">
-    <Platform Project="x64" />
-  </Project>
+  <Project Path="BrightnessControl.Core/BrightnessControl.Core.csproj" />
+  <Project Path="BrightnessControl/BrightnessControl.csproj" />
 </Solution>
