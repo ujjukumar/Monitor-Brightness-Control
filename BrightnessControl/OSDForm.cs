@@ -11,7 +11,7 @@ namespace BrightnessControl
         public OSDForm()
         {
             FormBorderStyle = FormBorderStyle.None;
-            StartPosition = FormStartPosition.CenterScreen;
+            StartPosition = FormStartPosition.Manual;
             Width = 300;
             Height = 60;
             BackColor = Color.Black;
@@ -62,8 +62,15 @@ namespace BrightnessControl
             label.Text = $"Brightness: {value}%";
             progressBar.Value = value;
             
-            // Re-center just in case resolution changed (optional)
-            CenterToScreen();
+            // Position on the screen where the cursor is
+            var screen = Screen.FromPoint(Cursor.Position);
+            var bounds = screen.Bounds;
+            
+            // Center on that screen
+            this.Location = new Point(
+                bounds.X + (bounds.Width - this.Width) / 2,
+                bounds.Y + (bounds.Height - this.Height) / 2 + 300 // Slightly lower than exact center often looks better
+            );
             
             // Reset opacity and timer
             Opacity = 0.8;

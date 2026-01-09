@@ -6,6 +6,9 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <UseWindowsForms>true</UseWindowsForms>
+        <StartupObject>BrightnessControl.Program</StartupObject>
+        <ApplicationIcon>icon.ico</ApplicationIcon>
+        <Platforms>AnyCPU;x64</Platforms>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -17,6 +20,12 @@
         <SelfContained>false</SelfContained>
         <PublishSingleFile>true</PublishSingleFile>
     </PropertyGroup>
+
+    <ItemGroup>
+      <Content Include="icon.ico">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </Content>
+    </ItemGroup>
 
     <ItemGroup>
       <ProjectReference Include="..\BrightnessControl.Core\BrightnessControl.Core.csproj" />

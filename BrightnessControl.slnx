@@ -1,4 +1,19 @@
 <Solution>
-  <Project Path="BrightnessControl.Core/BrightnessControl.Core.csproj" />
-  <Project Path="BrightnessControl/BrightnessControl.csproj" />
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Folder Name="/Release/">
+    <File Path="Release/BrightnessControl.exe" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path=".gitignore" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="BrightnessControl.Core/BrightnessControl.Core.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+  <Project Path="BrightnessControl/BrightnessControl.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
 </Solution>

@@ -2,19 +2,20 @@ using System.Runtime.InteropServices;
 
 namespace BrightnessControl.Core.Models
 {
-    public class DisplayMonitor
+    public class DisplayMonitor : IDisposable
     {
         public string DeviceName { get; }
         public string DeviceString { get; }
-        public string Path { get; }
+        public IntPtr Handle { get; private set; }
 
         private const int PHYSICAL_MONITOR_DESCRIPTION_SIZE = 128;
+        private bool disposedValue;
 
-        public DisplayMonitor(string deviceName, string deviceString, string path)
+        public DisplayMonitor(string deviceName, string deviceString, IntPtr handle)
         {
             DeviceName = deviceName;
             DeviceString = deviceString;
-            Path = path;
+            Handle = handle;
         }
 
         public override string ToString()
@@ -24,12 +25,15 @@ namespace BrightnessControl.Core.Models
 
         public async Task SetBrightnessAsync(int brightness)
         {
+            if (disposedValue) throw new ObjectDisposedException(nameof(DisplayMonitor));
+
             await Task.Run(() =>
             {
-                var hMonitor = new IntPtr(long.Parse(Path));
-                if (!SetVCPFeature(hMonitor, 0x10, (uint)brightness))
+                if (!SetVCPFeature(Handle, 0x10, (uint)brightness))
                 {
-                    throw new InvalidOperationException("Failed to set monitor brightness.");
+                    // Optionally log, but don't crash if one fails (e.g. monitor turned off)
+                    // throw new InvalidOperationException("Failed to set monitor brightness."); 
+                    System.Diagnostics.Debug.WriteLine($"Failed to set brightness for {DeviceString}");
                 }
             });
         }
@@ -55,17 +59,43 @@ namespace BrightnessControl.Core.Models
                             monitors.Add(new DisplayMonitor(
                                 info.szDevice,
                                 new string(monitor.szPhysicalMonitorDescription).TrimEnd('\0'),
-                                monitor.hPhysicalMonitor.ToString()
+                                monitor.hPhysicalMonitor
                             ));
                         }
-                        return true; // We don't destroy them here because we need the handles later (simplification for this example)
-                                     // Actually, we should destroy and re-get for cleaner handles, but for now we store the handle text
+                        // We DO NOT destroy them here. The DisplayMonitor instance now owns the handle 
+                        // and is responsible for calling DestroyPhysicalMonitors in Dispose().
                     }
                 }
                 return true;
             }, IntPtr.Zero);
 
             return monitors.ToArray();
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (Handle != IntPtr.Zero)
+                {
+                    // DestroyPhysicalMonitors expects an array
+                    var array = new PHYSICAL_MONITOR[] { new PHYSICAL_MONITOR { hPhysicalMonitor = Handle } };
+                    DestroyPhysicalMonitors(1, array);
+                    Handle = IntPtr.Zero;
+                }
+                disposedValue = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
+        }
+
+        ~DisplayMonitor()
+        {
+            Dispose(disposing: false);
         }
 
         [StructLayout(LayoutKind.Sequential)]
