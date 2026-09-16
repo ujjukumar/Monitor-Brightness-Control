@@ -1,0 +1,137 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      draft:
+        description: 'Create draft release'
+        type: boolean
+        default: false
+      prerelease:
+        description: 'Mark as prerelease'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Determine tag name
+        id: vars
+        shell: pwsh
+        run: |
+          if ('${{ github.ref_type }}' -eq 'tag') {
+            $tag = '${{ github.ref_name }}'
+          } else {
+            $tag = '${{ inputs.tag_name }}'
+          }
+          $version = $tag -replace '^v', ''
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Publish Framework-Dependent (Lightweight)
+        shell: pwsh
+        run: |
+          dotnet publish BrightnessControl/BrightnessControl.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained false `
+            -p:PublishSingleFile=true `
+            -p:PublishReadyToRun=true `
+            -p:Version=${{ steps.vars.outputs.version }} `
+            -o dist/framework-dependent
+
+      - name: Publish Self-Contained (Standalone)
+        shell: pwsh
+        run: |
+          dotnet publish BrightnessControl/BrightnessControl.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:PublishReadyToRun=true `
+            -p:Version=${{ steps.vars.outputs.version }} `
+            -o dist/standalone
+
+      - name: Package release artifacts
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.vars.outputs.tag }}"
+          
+          # Create packaging dirs
+          $fdDir = "BrightnessControl-${tag}-windows-x64"
+          $scDir = "BrightnessControl-${tag}-windows-x64-standalone"
+          New-Item -ItemType Directory -Path "dist/$fdDir", "dist/$scDir" -Force | Out-Null
+
+          # Copy files to Framework-Dependent bundle
+          Copy-Item "dist/framework-dependent/BrightnessControl.exe" -Destination "dist/$fdDir/BrightnessControl.exe"
+          Copy-Item "README.md" -Destination "dist/$fdDir/README.md"
+
+          # Copy files to Standalone bundle
+          Copy-Item "dist/standalone/BrightnessControl.exe" -Destination "dist/$scDir/BrightnessControl.exe"
+          Copy-Item "README.md" -Destination "dist/$scDir/README.md"
+
+          # Standalone executables for direct download
+          Copy-Item "dist/framework-dependent/BrightnessControl.exe" -Destination "dist/BrightnessControl.exe"
+          Copy-Item "dist/standalone/BrightnessControl.exe" -Destination "dist/BrightnessControl-standalone.exe"
+
+          # Create zips
+          Compress-Archive -Path "dist/$fdDir/*" -DestinationPath "dist/$fdDir.zip" -Force
+          Compress-Archive -Path "dist/$scDir/*" -DestinationPath "dist/$scDir.zip" -Force
+
+          # Generate SHA256 checksums
+          Push-Location dist
+          $fdZipHash = (Get-FileHash "$fdDir.zip" -Algorithm SHA256).Hash
+          "$fdZipHash  $fdDir.zip" | Out-File -FilePath "$fdDir.zip.sha256" -Encoding ascii
+
+          $scZipHash = (Get-FileHash "$scDir.zip" -Algorithm SHA256).Hash
+          "$scZipHash  $scDir.zip" | Out-File -FilePath "$scDir.zip.sha256" -Encoding ascii
+
+          $fdExeHash = (Get-FileHash "BrightnessControl.exe" -Algorithm SHA256).Hash
+          "$fdExeHash  BrightnessControl.exe" | Out-File -FilePath "BrightnessControl.exe.sha256" -Encoding ascii
+
+          $scExeHash = (Get-FileHash "BrightnessControl-standalone.exe" -Algorithm SHA256).Hash
+          "$scExeHash  BrightnessControl-standalone.exe" | Out-File -FilePath "BrightnessControl-standalone.exe.sha256" -Encoding ascii
+
+          # Combined checksums
+          "$fdZipHash  $fdDir.zip`n$scZipHash  $scDir.zip`n$fdExeHash  BrightnessControl.exe`n$scExeHash  BrightnessControl-standalone.exe" | Out-File -FilePath "checksums.txt" -Encoding ascii
+          Pop-Location
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: Monitor Brightness Control ${{ steps.vars.outputs.tag }}
+          draft: ${{ inputs.draft || false }}
+          prerelease: ${{ inputs.prerelease || false }}
+          generate_release_notes: true
+          files: |
+            dist/*.zip
+            dist/*.zip.sha256
+            dist/BrightnessControl.exe
+            dist/BrightnessControl.exe.sha256
+            dist/BrightnessControl-standalone.exe
+            dist/BrightnessControl-standalone.exe.sha256
+            dist/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -6,6 +6,8 @@
 # Build results
 [Bb]in/
 [Oo]bj/
+Release/
+dist/
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/
@@ -19,3 +21,6 @@ project.lock.json
 project.fragment.lock.json
 artifacts/
 *.user
+
+# Editor / AI assistants
+.gemini/
